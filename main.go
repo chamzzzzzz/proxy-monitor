@@ -17,12 +17,13 @@ import (
 )
 
 var (
-	proxies  []string
-	smtpAddr = os.Getenv("PROXY_MONITOR_SMTP_ADDR")
-	smtpUser = os.Getenv("PROXY_MONITOR_SMTP_USER")
-	smtpPass = os.Getenv("PROXY_MONITOR_SMTP_PASS")
-	source   = "From: {{.From}}\r\nTo: {{.To}}\r\nSubject: {{.Subject}}\r\n\r\n{{.Body}}"
-	t        *template.Template
+	proxies    []string
+	availables = make(map[string]bool)
+	smtpAddr   = os.Getenv("PROXY_MONITOR_SMTP_ADDR")
+	smtpUser   = os.Getenv("PROXY_MONITOR_SMTP_USER")
+	smtpPass   = os.Getenv("PROXY_MONITOR_SMTP_PASS")
+	source     = "From: {{.From}}\r\nTo: {{.To}}\r\nSubject: {{.Subject}}\r\n\r\n{{.Body}}"
+	t          *template.Template
 )
 
 func main() {
@@ -33,6 +34,9 @@ func main() {
 		}
 	} else {
 		proxies = strings.Split(proxiesEnv, ",")
+	}
+	for _, proxy := range proxies {
+		availables[proxy] = true
 	}
 
 	funcs := template.FuncMap{
@@ -53,28 +57,41 @@ func check() {
 	log.Printf("start check at %s\n", time.Now().Format("2006-01-02 15:04:05"))
 	t := time.Now()
 
-	var unavailable []string
+	changeset := make(map[string]bool)
 	for _, proxy := range proxies {
 		if proxy == "" {
 			continue
 		}
-		_, err := checkAvaiable(proxy)
-		if err != nil {
-			unavailable = append(unavailable, proxy)
+		_, err := testing(proxy)
+		available := err == nil
+		if availables[proxy] != available {
+			availables[proxy], changeset[proxy] = available, available
 		}
 	}
-	if len(unavailable) == 0 {
-		log.Printf("all proxies are available\n")
-	} else {
-		log.Printf("unavailable proxies: %v\n", unavailable)
-		notification(unavailable)
+	unavailable := false
+	for proxy, available := range changeset {
+		if available {
+			log.Printf("proxy %s change to available\n", proxy)
+		} else {
+			log.Printf("proxy %s change to unavailable\n", proxy)
+		}
 	}
-
+	for proxy, available := range availables {
+		if !available {
+			if _, ok := changeset[proxy]; !ok {
+				log.Printf("proxy %s is still unavailable\n", proxy)
+			}
+			unavailable = true
+		}
+	}
+	if unavailable {
+		notification(changeset, availables)
+	}
 	log.Printf("check used %v\n", time.Since(t))
 	log.Printf("finish check at %s\n", time.Now().Format("2006-01-02 15:04:05"))
 }
 
-func checkAvaiable(proxy string) ([]byte, error) {
+func testing(proxy string) ([]byte, error) {
 	proxyURL, err := url.Parse(proxy)
 	if err != nil {
 		return nil, err
@@ -100,13 +117,14 @@ func checkAvaiable(proxy string) ([]byte, error) {
 	return b, nil
 }
 
-func notification(unavailable []string) {
+func notification(changeset, availables map[string]bool) {
 	type Data struct {
-		From        string
-		To          string
-		Subject     string
-		Body        string
-		Unavailable []string
+		From       string
+		To         string
+		Subject    string
+		Body       string
+		Changeset  map[string]bool
+		Availables map[string]bool
 	}
 
 	log.Printf("sending notification...")
@@ -124,16 +142,28 @@ func notification(unavailable []string) {
 	to := []string{user}
 
 	body := ""
-	for _, proxy := range unavailable {
-		body += fmt.Sprintf("%s\r\n", proxy)
+	subject := ""
+	if len(changeset) > 0 {
+		subject = "状态变更"
+		for proxy, available := range changeset {
+			body += fmt.Sprintf("%s %s\r\n", proxy, desc(available))
+		}
+	} else {
+		subject = "状态持续"
+		for proxy, available := range availables {
+			if !available {
+				body += fmt.Sprintf("%s %s\r\n", proxy, desc(available))
+			}
+		}
 	}
 
 	data := Data{
-		From:        fmt.Sprintf("%s <%s>", mime.BEncoding.Encode("UTF-8", "Proxy Monitor"), user),
-		To:          to[0],
-		Subject:     mime.BEncoding.Encode("UTF-8", fmt.Sprintf("Proxy-%s", "Unavailable")),
-		Body:        body,
-		Unavailable: unavailable,
+		From:       fmt.Sprintf("%s <%s>", mime.BEncoding.Encode("UTF-8", "Proxy Monitor"), user),
+		To:         to[0],
+		Subject:    mime.BEncoding.Encode("UTF-8", fmt.Sprintf("Proxy-%s", subject)),
+		Body:       body,
+		Changeset:  changeset,
+		Availables: availables,
 	}
 
 	var buf bytes.Buffer
@@ -147,4 +177,11 @@ func notification(unavailable []string) {
 		log.Printf("send notification fail. err='%s'\n", err)
 	}
 	log.Printf("send notification success.\n")
+}
+
+func desc(available bool) string {
+	if available {
+		return "可用"
+	}
+	return "不可用"
 }
