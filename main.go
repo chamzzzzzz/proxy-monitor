@@ -57,6 +57,7 @@ func check() {
 	log.Printf("start check at %s\n", time.Now().Format("2006-01-02 15:04:05"))
 	t := time.Now()
 
+	unavailable := false
 	changeset := make(map[string]bool)
 	for _, proxy := range proxies {
 		if proxy == "" {
@@ -66,9 +67,9 @@ func check() {
 		available := err == nil
 		if availables[proxy] != available {
 			availables[proxy], changeset[proxy] = available, available
+			unavailable = true
 		}
 	}
-	unavailable := false
 	for proxy, available := range changeset {
 		if available {
 			log.Printf("proxy %s change to available\n", proxy)
@@ -158,9 +159,9 @@ func notification(changeset, availables map[string]bool) {
 	}
 
 	data := Data{
-		From:       fmt.Sprintf("%s <%s>", mime.BEncoding.Encode("UTF-8", "Proxy Monitor"), user),
+		From:       fmt.Sprintf("%s <%s>", mime.BEncoding.Encode("UTF-8", "Monitor"), user),
 		To:         to[0],
-		Subject:    mime.BEncoding.Encode("UTF-8", fmt.Sprintf("Proxy-%s", subject)),
+		Subject:    mime.BEncoding.Encode("UTF-8", fmt.Sprintf("「PX」%s", subject)),
 		Body:       body,
 		Changeset:  changeset,
 		Availables: availables,
