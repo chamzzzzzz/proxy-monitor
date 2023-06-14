@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -27,6 +28,10 @@ var (
 )
 
 func main() {
+	checknow := false
+	flag.BoolVar(&checknow, "checknow", false, "check now?")
+	flag.Parse()
+
 	proxiesEnv := os.Getenv("PROXY_MONITOR_PROXIES")
 	if proxiesEnv == "" {
 		for i := 1082; i <= 1087; i++ {
@@ -44,18 +49,27 @@ func main() {
 	}
 	t = template.Must(template.New("mail").Funcs(funcs).Parse(source))
 
-	for {
+	if checknow {
 		check()
+	}
+	for {
 		now := time.Now()
-		next := time.Date(now.Year(), now.Month(), now.Day(), now.Hour()+1, 0, 0, 0, now.Location())
+		hour := now.Hour()
+		if hour >= 19 {
+			hour += 1
+		} else {
+			hour = 19
+		}
+		next := time.Date(now.Year(), now.Month(), now.Day(), hour, 0, 0, 0, now.Location())
 		log.Printf("next check at %s\n", next.Format("2006-01-02 15:04:05"))
 		time.Sleep(next.Sub(now))
+		check()
 	}
 }
 
 func check() {
-	log.Printf("start check at %s\n", time.Now().Format("2006-01-02 15:04:05"))
-	t := time.Now()
+	now := time.Now()
+	log.Printf("start check at %s\n", now.Format("2006-01-02 15:04:05"))
 
 	unavailable := false
 	changeset := make(map[string]bool)
@@ -88,17 +102,17 @@ func check() {
 	if unavailable {
 		notification(changeset, availables)
 	}
-	log.Printf("check used %v\n", time.Since(t))
+	log.Printf("check used %v\n", time.Since(now))
 	log.Printf("finish check at %s\n", time.Now().Format("2006-01-02 15:04:05"))
 }
 
-func testing(proxy string) ([]byte, error) {
+func _testing(proxy string) ([]byte, error) {
 	proxyURL, err := url.Parse(proxy)
 	if err != nil {
 		return nil, err
 	}
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
 			Proxy: http.ProxyURL(proxyURL),
 		},
@@ -116,6 +130,18 @@ func testing(proxy string) ([]byte, error) {
 		return nil, err
 	}
 	return b, nil
+}
+
+func testing(proxy string) (b []byte, err error) {
+	for i := 0; i < 3; i++ {
+		b, err = _testing(proxy)
+		if err == nil {
+			return
+		}
+		log.Printf("test proxy %s fail. will retry(%d) after 10s later. err='%s'\n", proxy, i+1, err)
+		time.Sleep(10 * time.Second)
+	}
+	return
 }
 
 func notification(changeset, availables map[string]bool) {
