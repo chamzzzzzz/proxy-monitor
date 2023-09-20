@@ -23,6 +23,7 @@ var (
 	smtpAddr   = os.Getenv("PROXY_MONITOR_SMTP_ADDR")
 	smtpUser   = os.Getenv("PROXY_MONITOR_SMTP_USER")
 	smtpPass   = os.Getenv("PROXY_MONITOR_SMTP_PASS")
+	smtpTo     = os.Getenv("PROXY_MONITOR_SMTP_TO")
 	source     = "From: {{.From}}\r\nTo: {{.To}}\r\nSubject: {{.Subject}}\r\nContent-Type: {{.ContentType}}\r\n\r\n{{.Body}}"
 	t          *template.Template
 )
@@ -168,7 +169,7 @@ func notification(changeset, availables map[string]bool) {
 	}
 	user := smtpUser
 	password := smtpPass
-	to := []string{user}
+	to := []string{smtpTo}
 
 	body := ""
 	subject := ""
@@ -188,7 +189,7 @@ func notification(changeset, availables map[string]bool) {
 
 	data := Data{
 		From:        fmt.Sprintf("%s <%s>", mime.BEncoding.Encode("UTF-8", "Monitor"), user),
-		To:          to[0],
+		To:          strings.Join(to, ","),
 		Subject:     mime.BEncoding.Encode("UTF-8", fmt.Sprintf("「PX」%s", subject)),
 		ContentType: "text/plain; charset=utf-8",
 		Body:        body,
