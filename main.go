@@ -23,7 +23,7 @@ var (
 	smtpAddr   = os.Getenv("PROXY_MONITOR_SMTP_ADDR")
 	smtpUser   = os.Getenv("PROXY_MONITOR_SMTP_USER")
 	smtpPass   = os.Getenv("PROXY_MONITOR_SMTP_PASS")
-	source     = "From: {{.From}}\r\nTo: {{.To}}\r\nSubject: {{.Subject}}\r\n\r\n{{.Body}}"
+	source     = "From: {{.From}}\r\nTo: {{.To}}\r\nSubject: {{.Subject}}\r\nContent-Type: {{.ContentType}}\r\n\r\n{{.Body}}"
 	t          *template.Template
 )
 
@@ -146,12 +146,13 @@ func testing(proxy string) (b []byte, err error) {
 
 func notification(changeset, availables map[string]bool) {
 	type Data struct {
-		From       string
-		To         string
-		Subject    string
-		Body       string
-		Changeset  map[string]bool
-		Availables map[string]bool
+		From        string
+		To          string
+		Subject     string
+		ContentType string
+		Body        string
+		Changeset   map[string]bool
+		Availables  map[string]bool
 	}
 
 	log.Printf("sending notification...")
@@ -185,12 +186,13 @@ func notification(changeset, availables map[string]bool) {
 	}
 
 	data := Data{
-		From:       fmt.Sprintf("%s <%s>", mime.BEncoding.Encode("UTF-8", "Monitor"), user),
-		To:         to[0],
-		Subject:    mime.BEncoding.Encode("UTF-8", fmt.Sprintf("「PX」%s", subject)),
-		Body:       body,
-		Changeset:  changeset,
-		Availables: availables,
+		From:        fmt.Sprintf("%s <%s>", mime.BEncoding.Encode("UTF-8", "Monitor"), user),
+		To:          to[0],
+		Subject:     mime.BEncoding.Encode("UTF-8", fmt.Sprintf("「PX」%s", subject)),
+		ContentType: "text/plain; charset=utf-8",
+		Body:        body,
+		Changeset:   changeset,
+		Availables:  availables,
 	}
 
 	var buf bytes.Buffer
