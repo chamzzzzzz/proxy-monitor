@@ -169,7 +169,7 @@ func notification(changeset, availables map[string]bool) {
 	}
 	user := smtpUser
 	password := smtpPass
-	to := []string{smtpTo}
+	to := strings.Split(smtpTo, ",")
 
 	body := ""
 	subject := ""
