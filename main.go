@@ -158,7 +158,8 @@ func notification(changeset, availables map[string]bool) {
 	log.Printf("sending notification...")
 	addr := smtpAddr
 	if addr == "" {
-		addr = "smtp.mail.me.com:587"
+		log.Printf("send notification skip. smtp addr is empty.")
+		return
 	}
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -204,6 +205,7 @@ func notification(changeset, availables map[string]bool) {
 	auth := smtp.PlainAuth("", user, password, host)
 	if err := smtp.SendMail(addr, auth, user, to, buf.Bytes()); err != nil {
 		log.Printf("send notification fail. err='%s'\n", err)
+		return
 	}
 	log.Printf("send notification success.\n")
 }
